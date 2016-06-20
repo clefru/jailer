@@ -20,10 +20,10 @@
 #include <stdarg.h>
 #include <linux/limits.h>
 #include <errno.h>
- 
+
 int pivot_root(const char *new_root, const char *put_old);
 
-// FIXME write a perror+exit(errno) helper.
+char *new_root = NULL; // used by jail_dir, set by main()
 
 /* Helpers */
 
@@ -37,7 +37,7 @@ static int check(const char *pstr, int rc) {
 
 /**
  * Same as asprintf(buf, ..) except that buf is returned.
- */ 
+ */
 char *aasprintf(const char *fmt, ...) {
   va_list args; char *buf;
   va_start(args, fmt);
@@ -48,7 +48,7 @@ char *aasprintf(const char *fmt, ...) {
 
 /**
  * Write a string to a file
- */ 
+ */
 void write_file(char *path, char *str) {
   int fd = check("open", open(path, O_RDWR));
   write(fd, str, strlen(str));   // FIXME return code check
@@ -56,89 +56,24 @@ void write_file(char *path, char *str) {
 }
 
 /**
- * Lazy mkdir does no work if the directory exist. Otherwise, panic.
- */
-void lazy_mkdir(char *dir) {
-  struct stat buf;
-  int rc = stat(dir, &buf);
-  if(rc == 0) {
-    if(!S_ISDIR(buf.st_mode)) {
-      printf("%s already exists but is no directory.\n"); // FIXME, print to stderr
-      exit(-1);
-    }
-  } else if(errno == ENOENT) {
-    check(aasprintf("mkdir %s", dir), mkdir(dir, S_IRWXU));
-  } else {
-    perror("lazy_mkdir");
-    exit(-1);
-  }
-}
-
-/**
- * Recursive mkdir. Like mkdir -p
- */
-void mkdir_p(char *dir) {
-  char *ptr = dir;
-  if(dir[0] != '/') {
-    printf("dir must start with /"); // FIXME, print to stderr and label internal error
-    exit(-1);
-  }
-  // Skip /
-  ptr +=1;
-  while(ptr = strstr(ptr, "/")) {
-    ptr[0] = 0;
-    lazy_mkdir(dir);
-    ptr[0] = '/';
-    ptr += 1;    
-  }
-  lazy_mkdir(dir);
-}
-
-/**
- * Mounts after creating the mountpoint.
- */ 
-void mkmount(const char *src, char *dst, const char *fs, unsigned long flags, const void *data) {
-  mkdir_p(dst);
-  check("mount1", mount(src, dst, fs, flags, data));
-}
-
-/**
  * Bind mount with read-only remount support, FIXME link kernel bug here.
  */
-void bind_mount(char *src, char *dst, int read_only) {
-  // FIXME consider dropping dst, as dst is always jail_dir(src+1)
-  mkmount(src, dst, "bind", MS_BIND | MS_REC, NULL);
-  // FIXME security check whether we can steal a read-only mount into rw with another unprivileged container inside.
-  if(read_only) {
-    check(aasprintf("bind_mount: %s -> %s", src, dst), mount(src, dst, "bind", MS_BIND|MS_REMOUNT|MS_RDONLY, NULL));
+void bind_mount(char *src, char *dst, int flags) {
+  check(aasprintf("bind_mount: %s -> %s", src, dst), mount(src, dst, "bind", flags & ~MS_RDONLY, NULL));
+
+  if(flags & MS_RDONLY) {
+    check(aasprintf("bind_mount_remount: %s -> %s", src, dst), mount(src, dst, "bind", MS_BIND|MS_REMOUNT|MS_RDONLY, NULL));
   }
 }
 
-/**
- * areadlink returns a mallocated buffer with link target. 
- */
-char *areadlink(const char *pathname) {
-  char *buf = (char *)malloc(PATH_MAX);
-  ssize_t len;
-  bzero(buf, PATH_MAX);
-  len = readlink(pathname, buf, PATH_MAX);
-  if(len == PATH_MAX) {
-    perror("link name too long");
-    exit(-1);
-  }
-  return buf;
-};
-
-
-char *new_root = "jail/";
 char *jail_dir(const char *subdir) {
   return aasprintf("%s/%s", new_root, subdir);
-}  
+}
 
 void fork_once() {
   pid_t pid;
   pid = fork();
-  
+
   if(pid < 0) {
     perror("fork");
     exit(pid); // exit errno?
@@ -151,42 +86,59 @@ void fork_once() {
 };
 
 void pivot() {
-  // Bind root to itself so it becomes a pivotable mount.
   char *pivot = jail_dir(".pivot_root");
 
+  // Bind root to itself so it becomes a pivotable mount.
   mount(new_root, new_root, "bind", MS_BIND | MS_REC, NULL);
-  mkdir_p(pivot);
+  mkdir(pivot, S_IRWXU);
   check("pivot_root", pivot_root(new_root, pivot));
   check("chdir_root", chdir("/"));
   check("umount_pivot_root", umount2("/.pivot_root", MNT_DETACH));
   check("rmdir_pivot_root", rmdir("/.pivot_root"));
 };
 
+void mount_fstab() {
+    FILE *fstab = fopen(jail_dir(".fstab"), "r");
+    size_t line_len = 0;
+    char *line = NULL;
+    size_t read_len;
 
-// FIXME not sure whether to retain this struct.
-struct mnt {
-  char *src;
-  int flags;
-} mnts[] = {
-  { "/nix/store", 0},
-  { "/nix/var", 0},
-  { "/bin", 0},
-  { "/usr", 0},
-  { "/etc", 0},
-  { NULL }
-};
+    if(fstab == NULL) {
+      perror("Can't open fstab");
+      exit(-1);
+    }
+
+    while((read_len = getline(&line, &line_len, fstab)) != -1) {
+      char *buf = line;
+      char *src = strsep(&buf, ":");
+      char *target = strsep(&buf, ":");
+      char *fs = strsep(&buf, ":");
+      int flags = atoi(strsep(&buf, ":"));
+      if(flags & MS_BIND) {
+	bind_mount(src, jail_dir(target), flags);
+      } else {
+	mount(src, jail_dir(target), fs, flags, NULL);
+      }
+    }
+
+    fclose(fstab);
+    if(line)
+      free(line);
+}
 
 void main(int argc, char **argv) {
   uid_t uid = getuid();
   uid_t gid = getgid();
-  char *cwd = getcwd(NULL, 0);
-  
+  char *sandbox_root;
+  char **cmd_args;
+
   if(argc < 3) {
-    printf("Usage: dir command...\n"); //FIXME stderr print
+    fprintf(stderr, "Usage: sandbox_root command...\n");
     exit(-1);
   }
- 
-  new_root = mkdtemp(strdup("/tmp/sandbox.XXXXXX"));
+
+  new_root = argv[1];
+  cmd_args = argv+2;
 
   /* 1. Unshare. From here onwards, we have most root-equiv capabilities until we execve, FIXME LWN article here. */
   // FIXME try clone here, just to see if that works too.
@@ -199,25 +151,12 @@ void main(int argc, char **argv) {
   write_file("/proc/self/uid_map", aasprintf("%d %d 1", uid, uid));
   write_file("/proc/self/gid_map", aasprintf("%d %d 1", gid, gid));
 
-  /* 4. Setup dev/tmp/proc */
-  mkmount("tmp", jail_dir("tmp"), "tmpfs", MS_NOSUID | MS_STRICTATIME, NULL);
-  mkmount("dev", jail_dir("dev"), "tmpfs", MS_NOSUID | MS_STRICTATIME, NULL);
-  mkmount("proc", jail_dir("proc"), "proc", MS_NOEXEC | MS_NOSUID | MS_NODEV, NULL);
+  /* 4. Mount minimal fstab */
+  mount_fstab();
 
-  // Expose hosts /nix/var, /nix/store, /etc
-  for(struct mnt *m = mnts; m->src != NULL; m+=1) {
-    bind_mount(m->src, jail_dir((m->src)+1), 1);
-  }
-  // Expose current working dir from which the sameboxer was invoked.
-  bind_mount(argv[1], jail_dir(argv[1]+1), 0);
-  // Expose only /run/current-system
-  mkdir_p(jail_dir("run"));
-  symlink(areadlink("/run/current-system"), jail_dir("run/current-system"));
-
-  /* 6. Pivot into the new root */
+  /* 5. Pivot into the new root */
   pivot();
-  check("chdir_cwd", chdir(cwd));
 
-  /* 7. Exec */  
-  check("execve", execv(argv[2], argv + 2));
+  /* 6. Exec */
+  check("execve", execv(cmd_args[0], cmd_args + 1));
 }
