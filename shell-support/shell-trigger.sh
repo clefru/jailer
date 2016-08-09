@@ -2,7 +2,7 @@ verify_signature() {
     local file=$1 out=
     if out=$(gpg2 --status-fd 1 --verify shell.nix.sig shell.nix 2>/dev/null) &&
        echo "$out" | grep -qs "^\[GNUPG:\] VALIDSIG $2 " &&
-       echo "$out" | grep -qs "^\[GNUPG:\] TRUST_ULTIMATE\$"; then
+       echo "$out" | grep -qs "^\[GNUPG:\] TRUST_ULTIMATE"; then
 	return 0
     else
 	echo "$out" >&2
