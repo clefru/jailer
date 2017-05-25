@@ -1,7 +1,7 @@
 verify_signature() {
-    local file=$1 out=
-    if out=$(gpg2 --status-fd 1 --verify shell.nix.sig shell.nix 2>/dev/null) &&
-       echo "$out" | grep -qs "^\[GNUPG:\] VALIDSIG $2 " &&
+    local file=$1 sigfile=$2 trusted=$3 out=
+    if out=$(gpg2 --status-fd 1 --verify $sigfile $file 2>/dev/null) &&
+       echo "$out" | grep -qs "^\[GNUPG:\] VALIDSIG $trusted " &&
        echo "$out" | grep -qs "^\[GNUPG:\] TRUST_ULTIMATE"; then
 	return 0
     else
@@ -15,7 +15,7 @@ chpwd() {
       SHELL_NIX=$(findup shell.nix)
       if [ -n "$SHELL_NIX" ]; then
 	  if [ -e "$SHELL_NIX".sig ]; then
-	      if verify_signature $SHELL_NIX.sig $TRUSTED_KEY; then
+	      if verify_signature $SHELL_NIX $SHELL_NIX.sig $TRUSTED_KEY; then
 		  echo "good sig found."
 		  # The protocol between this helper and the shell spawned is that
 		  # this shell will chdir to a dir written to file descriptor 3
