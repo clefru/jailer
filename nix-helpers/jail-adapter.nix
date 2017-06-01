@@ -34,7 +34,7 @@ let pkgs = import <nixpkgs> {};
     '';
     enterJail = pkgs.writeScript "enter-jail" ''#!${shell}
       SANDBOX_ROOT=$(mktemp -d /tmp/sandbox.XXXXXXX)
-      cd $SANDBOX_ROOT
+      (cd $SANDBOX_ROOT
 
       ${mount_flags}
 
@@ -70,9 +70,9 @@ let pkgs = import <nixpkgs> {};
       mkdir -p ./$1; echo $1:$1:bind:$(($MS_BIND | $MS_REC)) >> .fstab
 
       # FIXME make that customizable.
-      cp $HOME/.Xauthority .
+      cp $HOME/.Xauthority .)
 
-      exec ${jailer}/bin/jailer $SANDBOX_ROOT $2
+      exec ${jailer}/bin/jailer $SANDBOX_ROOT $2 $PWD
     '';
     setShellHook = enterJail: inJail: dir: drv:
       # FIXME: The following kills the shell executing the run hook with an exec.
