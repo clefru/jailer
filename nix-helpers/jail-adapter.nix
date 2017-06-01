@@ -69,7 +69,6 @@ let pkgs = import <nixpkgs> {};
       mkdir -p proc; echo proc:/proc:proc:$(($MS_NOSUID | $MS_NOEXEC | $MS_NODEV)) >> .fstab
       mkdir -p ./$1; echo $1:$1:bind:$(($MS_BIND | $MS_REC)) >> .fstab
 
-      # FIXME make that customizable.
       cp $HOME/.Xauthority .)
 
       exec ${jailer}/bin/jailer $SANDBOX_ROOT $2 $PWD
@@ -95,56 +94,45 @@ let pkgs = import <nixpkgs> {};
 	   esac
        }
        '';
-    afterJail = dir: ''
-      export CAGEFILE=$(mktemp -u /tmp/cage.XXXXXXX)
-      mknod $CAGEFILE p
-      (cat $CAGEFILE 1>&3) &
+    inJail = opt: pkgs.writeScript "in-jail" ''#!${shell}
+      ${if opt.cage
+           then ''export CAGEFILE=$(mktemp -u /tmp/cage.XXXXXXX)
+                  mknod $CAGEFILE p
+                  (cat $CAGEFILE 1>&3) &''
+           else ""}
       exec 3>&-
-      export CAGE=${builtins.toString dir}
-      cd ${builtins.toString dir}
       export ZDOTDIR=$(mktemp -d /tmp/zroot.XXXXX)
+      export CAGE=${builtins.toString opt.dir}
       ln -s ${zshrcDirLocked} $ZDOTDIR/.zshrc
-    '';
-    inJailDirLocked = dir: pkgs.writeScript "in-jail" ''#!${shell}
-      ${afterJail dir}
-      ln -s /host-etc /etc
-      ln -s /host-bin /bin
-      ln -s /host-usr /usr
-      exec /run/current-system/sw/bin/zsh'';
-    inJailFHS = dir: drv: pkgs.writeScript "in-jail" ''#!${shell}
-      ${afterJail dir}
-      export XAUTHORITY=/.Xauthority
-      ln -s /tmp-x11 /tmp/.X11-unix
-      ${jailer}/bin/linker ${drv} /
-
-      ln -s /host-tmp/.X* /tmp
+      ${if opt.fhs != {}
+           then ''${jailer}/bin/linker ${opt.fhs} /
+                ''
+           else ""}
+      [ -e /etc ] || ln -s /host/etc /etc
+      [ -e /bin ] || ln -s /host/bin /bin
+      [ -e /usr ] || ln -s /host/usr /usr
       source /etc/profile
-      exec /run/current-system/sw/bin/zsh'';
-    inJailSimple = dir: pkgs.writeScript "in-jail" ''#!${shell}
-      exec 3>&-
-      cd ${builtins.toString dir}
-      export ZDOTDIR=$(mktemp -d /tmp/zroot.XXXXX)
-      touch $ZDOTDIR/.zshrc
-      ln -s /host-etc /etc
-      ln -s /host-bin /bin
-      ln -s /host-usr /usr
+      ln -s /host/tmp/.X11-unix /tmp/.X11-unix
+      ${if opt.X11
+           then ''export XAUTHORITY=/.Xauthority''
+           else ''rm /.Xauthority''}
+
+      # chdir into the directory handed over to us by enterJail
+      cd $1
       exec /run/current-system/sw/bin/zsh'';
 in {
-  dirLockedSandbox = dir: drv: setShellHook enterJail (inJailDirLocked dir) dir drv;
-  simpleSandbox = dir: drv: setShellHook enterJail (inJailSimple dir) dir drv;
-  fhsSandbox = dir: drv: setShellHook enterJail (inJailFHS dir drv) dir drv;
-  fhsSandboxUnlocked = dir: drv:
-     let inJail = pkgs.writeScript "in-jail" ''#!${shell}
-	   exec 3>&-
+  # A simple sandbox is one where we can freely navigate around in. The jail should be left by exiting the shell. Entry should happen with just nix-shell jail.nix.
+  simpleSandbox = dir: drv: (
+    setShellHook
+      enterJail
+      (inJail { dir = dir; cage = false; X11 = false; fhs = {}; })
+      dir
+      drv);
 
-	   ${jailer}/bin/linker ${drv} /
+  # A directory locked sandbox spawns a shell, which will exit if dir is not a prefix of $PWD. This is meant to be activated with shell-supported.
+  dirLockedSandbox = dir: drv: setShellHook enterJail (inJail { dir = dir; cage = true; X11 = false; fhs = {}; } ) dir drv;
 
-	   export XAUTHORITY=${builtins.toString dir}/.Xauthority
-	   ln -s /host-tmp/.X* /tmp
-	   export ZDOTDIR=$(mktemp -d /tmp/zroot.XXXXX)
-	   touch $ZDOTDIR/.zshrc
-	   source /etc/profile
-	   cd ${builtins.toString dir}
-	   exec /run/current-system/sw/bin/zsh'';
-     in setShellHook enterJail inJail dir drv;
+  # Same as dir locked sandbox but also creates an FHS environment. This is meant to be activated with shell-supported.
+  fhsSandbox = dir: drv: setShellHook enterJail (inJail { dir = dir; fhs = drv; cage = true; X11 = false; }) dir drv;
+  fhsSandboxUnlocked = dir: drv: setShellHook enterJail (inJail { dir = dir; fhs = drv; cage = false; X11 = false; }) dir drv;
 }
