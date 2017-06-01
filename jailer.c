@@ -140,7 +140,7 @@ void main(int argc, char **argv) {
   new_root = argv[1];
   cmd_args = argv+2;
 
-  /* 1. Unshare. From here onwards, we have most root-equiv capabilities until we execve, FIXME LWN article here. */
+  /* 1. Unshare. From here onwards, we have most root-equiv capabilities until we execve-ed, FIXME LWN article here. */
   // FIXME try clone here, just to see if that works too.
   check("unshare", unshare(CLONE_NEWNS | CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWUTS));
   /* 2. Fork once, so we become the parent of the new process id space and can mount proc */
@@ -158,5 +158,5 @@ void main(int argc, char **argv) {
   pivot();
 
   /* 6. Exec */
-  check("execve", execv(cmd_args[0], cmd_args + 1));
+  check("execve", execv(cmd_args[0], cmd_args));
 }
