@@ -43,12 +43,18 @@ let pkgs = import <nixpkgs> {};
 
       mkdir -p nix/store; echo /nix/store:/nix/store:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
       mkdir -p nix/var; echo /nix/var:/nix/var:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
-      mkdir -p host-etc; echo /etc:/host-etc:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
-      mkdir -p host-bin; echo /bin:/host-bin:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
-      mkdir -p host-usr; echo /usr:/host-usr:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
+      mkdir -p host;
+      mkdir -p host/etc; echo /etc:/host/etc:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
+      mkdir -p host/bin; echo /bin:/host/bin:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
+      mkdir -p host/usr; echo /usr:/host/usr:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
 
       mkdir -p tmp; echo tmp:/tmp:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-      mkdir -p tmp-x11; echo /tmp/.X11-unix:/tmp-x11:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
+
+      # We can't effectively mkdir sandbox/tmp/.X11-unix, as its
+      # parent sandbox/tmp will be covered by the tmpfs mount
+      # point. That's why we mount to /host/tmp/.X11-unix and link it
+      # in the jail script.
+      mkdir -p host/tmp/.X11-unix; echo /tmp:/host/tmp/.X11-unix:bind:$(($MS_BIND | $MS_REC)) >> .fstab
 
       # We can't mount devtmpfs. We can't even mount /dev without
       # MS_REC. Best we can do is shadow out sensitive parts like
