@@ -41,32 +41,53 @@ let pkgs = import <nixpkgs> {};
       mkdir -p run
       cp -a /run/current-system run
 
+      # Note on security: Only binds mounts and file systems with FS_USERNS_MOUNT
+      # set in .fs_flags can be mounted from user-space containers.
+      #
+      # https://github.com/torvalds/linux/search?utf8=%E2%9C%93&q=FS_USERNS_MOUNT&type=
+
       mkdir -p nix/store; echo /nix/store:/nix/store:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
       mkdir -p nix/var; echo /nix/var:/nix/var:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
-      mkdir -p host;
+
+      # Note that
+      #   mkdir -p foo;     echo ...:/foo:... >> .fstab
+      #   mkdir -p foo/bar; echo ...:/foo/bar:... >> .fstab
+      # potentially doesn't work as the second mkdir is ineffective as
+      # it gets shadowed when foo gets mounted. Unless foo has a bar
+      # subdir, this second mount will fail.
+
       mkdir -p host/etc; echo /etc:/host/etc:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
       mkdir -p host/bin; echo /bin:/host/bin:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
       mkdir -p host/usr; echo /usr:/host/usr:bind:$(($MS_BIND | $MS_RDONLY | $MS_REC)) >> .fstab
+      mkdir -p host/tmp/.X11-unix; echo /tmp/.X11-unix:/host/tmp/.X11-unix:bind:$(($MS_BIND | $MS_REC)) >> .fstab
 
       mkdir -p tmp; echo tmp:/tmp:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-
-      # We can't effectively mkdir sandbox/tmp/.X11-unix, as its
-      # parent sandbox/tmp will be covered by the tmpfs mount
-      # point. That's why we mount to /host/tmp/.X11-unix and link it
-      # in the jail script.
-      mkdir -p host/tmp/.X11-unix; echo /tmp:/host/tmp/.X11-unix:bind:$(($MS_BIND | $MS_REC)) >> .fstab
-
-      # We can't mount devtmpfs. We can't even mount /dev without
-      # MS_REC. Best we can do is shadow out sensitive parts like
-      # /dev/shm, /dev/mqueue, /dev/hugepages. The jail can't unmount
-      # those to recover the original mount point.
-      #mkdir -p dev; echo dev:/dev:devtmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-      mkdir -p dev; echo /dev:/dev:bind:$(($MS_BIND | $MS_REC | $MS_RDONLY)) >> .fstab
-      mkdir -p dev/shm; echo tmp:/dev/shm:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-      mkdir -p dev/mqueue; echo tmp:/dev/mqueue:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-      mkdir -p dev/hugepages; echo tmp:/dev/hugepages:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-
       mkdir -p proc; echo proc:/proc:proc:$(($MS_NOSUID | $MS_NOEXEC | $MS_NODEV)) >> .fstab
+
+      # On /dev we:
+      # * can't mount devtmpfs, as devtmpfs isn't registered with
+      #   .fs_flags |= FS_USERNS_MOUNT.
+      # * can't bind-mount /dev without MS_REC. FIXME: Why?
+
+      mkdir -p dev; echo /dev:/dev:bind:$(($MS_BIND | $MS_REC | $MS_RDONLY)) >> .fstab
+
+      # Using MS_REC above unfortunately exposes the mqueue, shm and
+      # hugepages submounts.  These are potentially sensitive parts
+      # that the user didn't want to share with the sandbox.  Best we
+      # can do is shadow out sensitive parts with more tmpfs
+      # mounts. The jail can't unmount those to recover the original
+      # mount point.
+      #
+      # The proper fix for this is use a fuse FS that only passes
+      # through a set of whitelisted files from /dev.  Unfortunately
+      # overlayfs is not maked FS_USERNS_MOUNT, so we can't use it
+      # here.
+
+      echo tmp:/dev/shm:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
+      echo tmp:/dev/mqueue:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
+      echo tmp:/dev/hugepages:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
+
+      # Bind mount the root of the sandbox.
       mkdir -p ./$1; echo $1:$1:bind:$(($MS_BIND | $MS_REC)) >> .fstab
 
       cp $HOME/.Xauthority .)
