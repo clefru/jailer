@@ -41,6 +41,7 @@ static int check(const char *pstr, int rc) {
 char *aasprintf(const char *fmt, ...) {
   va_list args; char *buf;
   va_start(args, fmt);
+  // FIXME: Check return code and panic on failed allocation.
   vasprintf(&buf, fmt, args);
   va_end(args);
   return buf;
