@@ -117,7 +117,7 @@ void mount_fstab() {
       if(flags & MS_BIND) {
 	bind_mount(src, jail_dir(target), flags);
       } else {
-	mount(src, jail_dir(target), fs, flags, NULL);
+        check(aasprintf("mount: %s -> %s (%s) %d %s", src, jail_dir(target), fs, flags, buf), mount(src, jail_dir(target), fs, flags, buf));
       }
     }
 
