@@ -62,7 +62,7 @@ void bind_mount(char *src, char *dst, int flags) {
   check(aasprintf("bind_mount: %s -> %s", src, dst), mount(src, dst, "bind", flags & ~MS_RDONLY, NULL));
 
   if(flags & MS_RDONLY) {
-    check(aasprintf("bind_mount_remount: %s -> %s", src, dst), mount(src, dst, "bind", MS_BIND|MS_REMOUNT|MS_RDONLY, NULL));
+    check(aasprintf("bind_mount_remount: %s -> %s", src, dst), mount(src, dst, "bind", flags, NULL));
   }
 }
 
