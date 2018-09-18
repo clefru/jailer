@@ -1,7 +1,6 @@
 let pkgs = import <nixpkgs> {};
 in pkgs.stdenv.mkDerivation {
   name = "jailer";
-  srcs = [./Makefile ./jailer.c ./linker.c];
-  unpackCmd = "mkdir -p src; cp -a $curSrc src/$\{curSrc#*-\}";
+  src = ./.;
   installFlags = "DESTDIR=\${out}";
 }
