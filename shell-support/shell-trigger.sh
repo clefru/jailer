@@ -1,4 +1,4 @@
-chpwd() {
+function pwdnix_jail_enter() {
     if [ -n "$TRUSTED_KEY" ]; then
       JAIL_NIX=$(findup jail.nix)
       if [ -n "$JAIL_NIX" ]; then
@@ -20,3 +20,5 @@ chpwd() {
       fi
    fi
 }
+
+chpwd_functions=(${chpwd_functions[@]} "pwdnix_jail_enter")
