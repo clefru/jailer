@@ -123,15 +123,18 @@ let pkgs = import <nixpkgs> {};
            else ""}
       exec 3>&-
       export ZDOTDIR=$(mktemp -d /tmp/zroot.XXXXX)
-      export CAGE=${builtins.toString opt.dir}
+      export CAGE=${builtins.toString opt.sandboxRoot}
+      # TODO: Fake passwd entry for home as many programs go for ~$USER instead of $HOME. :/
+      # FIXME: Fix the shell prompt to print ~ at the old $HOME.
+      ${if opt.sandboxIsHome
+           then ''export HOME=$CAGE''
+           else ""}
       ln -s ${zshrcDirLocked} $ZDOTDIR/.zshrc
       ${if opt.fhs != {}
-           then ''${jailer}/bin/linker ${opt.fhs} /
-                ''
-           else ""}
-      [ -e /etc ] || ln -s /host/etc /etc
-      [ -e /bin ] || ln -s /host/bin /bin
-      [ -e /usr ] || ln -s /host/usr /usr
+           then ''${jailer}/bin/linker ${opt.fhs} /''
+           else ''ln -s /host/etc /etc
+                  ln -s /host/bin /bin
+                  ln -s /host/usr /usr''}
       source /etc/profile
       ln -s /host/tmp/.X11-unix /tmp/.X11-unix
       ${if opt.X11
@@ -141,19 +144,42 @@ let pkgs = import <nixpkgs> {};
       # chdir into the directory handed over to us by enterJail
       cd $1
       exec /run/current-system/sw/bin/zsh'';
+    addDefaults = opt: pkgs.stdenv.lib.zipAttrsWith (name: values: builtins.head values) [opt { sandboxIsHome = false; }];
 in {
-  # A simple sandbox is one where we can freely navigate around in. The jail should be left by exiting the shell. Entry should happen with just nix-shell jail.nix.
-  simpleSandbox = dir: drv: (
+  # A simple sandbox is one where we can freely navigate around
+  # in. The jail should be left by exiting the shell. Entry should
+  # happen with just nix-shell jail.nix.
+  simpleSandbox = sandboxRoot: drv: (
     setShellHook
       enterJail
-      (inJail { dir = dir; cage = false; X11 = false; fhs = {}; })
-      dir
+      (inJail { sandboxRoot = sandboxRoot; cage = false; X11 = false; fhs = {}; })
+      sandboxRoot
       drv);
 
-  # A directory locked sandbox spawns a shell, which will exit if dir is not a prefix of $PWD. This is meant to be activated with shell-supported.
-  dirLockedSandbox = dir: drv: setShellHook enterJail (inJail { dir = dir; cage = true; X11 = false; fhs = {}; } ) dir drv;
+  # A directory locked sandbox spawns a shell, which will exit if sandboxRoot
+  # is not a prefix of $PWD. This is meant to be activated with
+  # shell-support.
+  dirLocked = sandboxRoot: drv: (
+    setShellHook
+      enterJail
+      (inJail { sandboxRoot = sandboxRoot; cage = true; X11 = false; fhs = {}; })
+      sandboxRoot
+      drv);
 
-  # Same as dir locked sandbox but also creates an FHS environment. This is meant to be activated with shell-supported.
-  fhsSandbox = dir: drv: setShellHook enterJail (inJail { dir = dir; fhs = drv; cage = true; X11 = false; }) dir drv;
-  fhsSandboxUnlocked = dir: drv: setShellHook enterJail (inJail { dir = dir; fhs = drv; cage = false; X11 = false; }) dir drv;
+  # Same as dir locked sandbox but also creates an FHS
+  # environment. This is meant to be activated with shell-support.
+  fhsSandbox = sandboxRoot: drv: (
+    setShellHook
+      enterJail
+      (inJail { sandboxRoot = sandboxRoot; cage = true; X11 = false; fhs = drv; })
+      sandboxRoot
+      drv);
+  fhsSandboxUnlocked = sandboxRoot: drv: (
+    setShellHook
+      enterJail
+      (inJail { sandboxRoot = sandboxRoot; cage = false; X11 = false; fhs = drv; })
+      sandboxRoot
+      drv);
+
+  sandbox = opt: setShellHook enterJail (inJail (addDefaults opt)) opt.sandboxRoot opt.drv;
 }
