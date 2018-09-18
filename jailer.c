@@ -41,8 +41,7 @@ static int check(const char *pstr, int rc) {
 char *aasprintf(const char *fmt, ...) {
   va_list args; char *buf;
   va_start(args, fmt);
-  // FIXME: Check return code and panic on failed allocation.
-  vasprintf(&buf, fmt, args);
+  check("vasprintf", vasprintf(&buf, fmt, args));
   va_end(args);
   return buf;
 }
@@ -52,7 +51,14 @@ char *aasprintf(const char *fmt, ...) {
  */
 void write_file(char *path, char *str) {
   int fd = check("open", open(path, O_RDWR));
-  write(fd, str, strlen(str));   // FIXME return code check
+  int bytes = strlen(str);
+  int rc;
+
+  rc = write(fd, str, bytes);
+  if(rc != bytes) {
+    perror("write");
+    exit(-1);
+  }
   check("close", close(fd));
 }
 

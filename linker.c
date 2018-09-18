@@ -49,9 +49,13 @@ int exists(char *path) {
  * Same as asprintf(buf, ..) except that buf is returned.
  */
 char *aasprintf(const char *fmt, ...) {
-  va_list args; char *buf;
+  va_list args; char *buf; int rc;
   va_start(args, fmt);
-  vasprintf(&buf, fmt, args);
+  rc = vasprintf(&buf, fmt, args);
+  if(rc < 0) {
+    perror("vasprintf");
+    exit(-1);
+  }
   va_end(args);
   return buf;
 }
