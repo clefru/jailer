@@ -90,7 +90,7 @@ let pkgs = import <nixpkgs> {};
       # Bind mount the root of the sandbox.
       mkdir -p ./$1; echo $1:$1:bind:$(($MS_BIND | $MS_REC)) >> .fstab
 
-      cp $HOME/.Xauthority .)
+      cp ''${XAUTHORITY:-$HOME/.Xauthority} .Xauthority)
 
       exec ${jailer}/bin/jailer $SANDBOX_ROOT $2 $PWD
     '';
