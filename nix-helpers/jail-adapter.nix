@@ -104,15 +104,15 @@ let pkgs = import <nixpkgs> {};
     zshrcDirLocked = pkgs.writeText "zshrc" ''
        PS1="# "
        chpwd() {
-	   case $PWD/ in
-	       $CAGE/*)
-	       ;;
-	       *)
-		   if [ -n "$CAGEFILE" ]; then
-		       echo $PWD > $CAGEFILE
-		       exit 0
-		   fi
-	   esac
+	 case $PWD/ in
+	   $CAGE/*)
+	   ;;
+	   *)
+	     if [ -n "$CAGEFILE" ]; then
+	       echo $PWD > $CAGEFILE
+	       exit 0
+	     fi
+	 esac
        }
        '';
     inJail = opt: pkgs.writeScript "in-jail" ''#!${shell}
