@@ -1,3 +1,8 @@
+# This should give mostly the correct path of the jailer main dir
+JAILER_DIR=$(cd ${funcsourcetrace[1]%/*} 2> /dev/null; pwd)
+
+export NIX_PATH="pwd-nixjail=$JAILER_DIR:$NIX_PATH"
+
 function pwdnix_jail_enter() {
     if [ -n "$TRUSTED_KEY" ]; then
       JAIL_NIX=$(findup jail.nix)
