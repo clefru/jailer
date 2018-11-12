@@ -144,7 +144,19 @@ let pkgs = import <nixpkgs> {};
       # chdir into the directory handed over to us by enterJail
       cd $1
       exec /run/current-system/sw/bin/zsh'';
-    addDefaults = opt: pkgs.stdenv.lib.zipAttrsWith (name: values: builtins.head values) [opt { sandboxIsHome = false; }];
+    defaults = { fhs = {}; sandboxIsHome = false; cage = true; X11 = false; };
+    addDefaults = opt: pkgs.stdenv.lib.zipAttrsWith (name: values: builtins.head values) [opt defaults];
+
+    # Call sandbox with the following set:
+    # {
+    #   sandboxRoot: set this to the root of the sandbox. Best is to use ./. in the calling jail.nix file.
+    #   drv: set to the derivation which is used as the basis of the shellHook. This defines the environment of the spanned shell.
+    #   fhs: set to a derivation to link into / of the sandbox. Mostly useful for using FHS style setup at /. Otherwise set to {} (default).
+    #   cage: set to true, if you want the shell to exit if the users chdir-s outside the sandboxRoot. False (default).
+    #   X11: set to true, if you want X11 access. False (default).
+    #   sandboxIsHome: set to true, if you want $HOME set to sandboxRoot. False (default).
+    # }
+    sandbox = opt: setShellHook enterJail (inJail (addDefaults opt)) opt.sandboxRoot opt.drv;
 in {
   # A simple sandbox is one where we can freely navigate around
   # in. The jail should be left by exiting the shell. Entry should
@@ -181,5 +193,5 @@ in {
       sandboxRoot
       drv);
 
-  sandbox = opt: setShellHook enterJail (inJail (addDefaults opt)) opt.sandboxRoot opt.drv;
+  sandbox = sandbox;
 }
