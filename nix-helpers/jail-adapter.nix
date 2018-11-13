@@ -144,7 +144,7 @@ let pkgs = import <nixpkgs> {};
       # chdir into the directory handed over to us by enterJail
       cd $1
       exec /run/current-system/sw/bin/zsh'';
-    defaults = { fhs = {}; sandboxIsHome = false; cage = true; X11 = false; };
+    defaults = { fhs = {}; sandboxIsHome = false; cage = false; X11 = false; };
     addDefaults = opt: pkgs.stdenv.lib.zipAttrsWith (name: values: builtins.head values) [opt defaults];
 
     # Call sandbox with the following set:
