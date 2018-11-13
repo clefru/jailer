@@ -146,52 +146,15 @@ let pkgs = import <nixpkgs> {};
       exec /run/current-system/sw/bin/zsh'';
     defaults = { fhs = {}; sandboxIsHome = false; cage = false; X11 = false; };
     addDefaults = opt: pkgs.stdenv.lib.zipAttrsWith (name: values: builtins.head values) [opt defaults];
-
-    # Call sandbox with the following set:
-    # {
-    #   sandboxRoot: set this to the root of the sandbox. Best is to use ./. in the calling jail.nix file.
-    #   drv: set to the derivation which is used as the basis of the shellHook. This defines the environment of the spanned shell.
-    #   fhs: set to a derivation to link into / of the sandbox. Mostly useful for using FHS style setup at /. Otherwise set to {} (default).
-    #   cage: set to true, if you want the shell to exit if the users chdir-s outside the sandboxRoot. False (default).
-    #   X11: set to true, if you want X11 access. False (default).
-    #   sandboxIsHome: set to true, if you want $HOME set to sandboxRoot. False (default).
-    # }
-    sandbox = opt: setShellHook enterJail (inJail (addDefaults opt)) opt.sandboxRoot opt.drv;
 in {
-  # A simple sandbox is one where we can freely navigate around
-  # in. The jail should be left by exiting the shell. Entry should
-  # happen with just nix-shell jail.nix.
-  simpleSandbox = sandboxRoot: drv: (
-    setShellHook
-      enterJail
-      (inJail { sandboxRoot = sandboxRoot; cage = false; X11 = false; fhs = {}; })
-      sandboxRoot
-      drv);
-
-  # A directory locked sandbox spawns a shell, which will exit if sandboxRoot
-  # is not a prefix of $PWD. This is meant to be activated with
-  # shell-support.
-  dirLocked = sandboxRoot: drv: (
-    setShellHook
-      enterJail
-      (inJail { sandboxRoot = sandboxRoot; cage = true; X11 = false; fhs = {}; })
-      sandboxRoot
-      drv);
-
-  # Same as dir locked sandbox but also creates an FHS
-  # environment. This is meant to be activated with shell-support.
-  fhsSandbox = sandboxRoot: drv: (
-    setShellHook
-      enterJail
-      (inJail { sandboxRoot = sandboxRoot; cage = true; X11 = false; fhs = drv; })
-      sandboxRoot
-      drv);
-  fhsSandboxUnlocked = sandboxRoot: drv: (
-    setShellHook
-      enterJail
-      (inJail { sandboxRoot = sandboxRoot; cage = false; X11 = false; fhs = drv; })
-      sandboxRoot
-      drv);
-
-  sandbox = sandbox;
+  # Call sandbox with the following set:
+  # {
+  #   sandboxRoot: set this to the root of the sandbox. Best is to use ./. in the calling jail.nix file.
+  #   drv: set to the derivation which is used as the basis of the shellHook. This defines the environment of the spanned shell.
+  #   fhs: set to a derivation to link into / of the sandbox. Mostly useful for using FHS style setup at /. Otherwise set to {} (default).
+  #   cage: set to true, if you want the shell to exit if the users chdir-s outside the sandboxRoot. False (default).
+  #   X11: set to true, if you want X11 access. False (default).
+  #   sandboxIsHome: set to true, if you want $HOME set to sandboxRoot. False (default).
+  # }
+  sandbox = opt: setShellHook enterJail (inJail (addDefaults opt)) opt.sandboxRoot opt.drv;
 }
