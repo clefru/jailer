@@ -101,9 +101,9 @@ let pkgs = import <nixpkgs> {};
       pkgs.stdenv.lib.overrideDerivation drv (oldAttrs: {
 	      shellHook = ''exec ${enterJailCmd} ${builtins.toString dir} ${inJailCmd}'';
       });
-    zshrcDirLocked = pkgs.writeText "zshrc" ''
-       PS1="# "
-       chpwd() {
+    zshrc = originalShellHook: pkgs.writeText "zshrc" ''
+PS1="# "
+chpwd() {
 	 case $PWD/ in
 	   $CAGE/*)
 	   ;;
@@ -113,9 +113,10 @@ let pkgs = import <nixpkgs> {};
 	       exit 0
 	     fi
 	 esac
-       }
-       '';
-    inJail = opt: pkgs.writeScript "in-jail" ''#!${shell}
+}
+${originalShellHook}
+'';
+    inJail = opt: drv: pkgs.writeScript "in-jail" ''#!${shell}
       ${if opt.cage
            then ''export CAGEFILE=$(mktemp -u /tmp/cage.XXXXXXX)
                   mknod $CAGEFILE p
@@ -129,7 +130,7 @@ let pkgs = import <nixpkgs> {};
       ${if opt.sandboxIsHome
            then ''export HOME=$CAGE''
            else ""}
-      ln -s ${zshrcDirLocked} $ZDOTDIR/.zshrc
+      ln -s ${zshrc (if drv?shellHook then drv.shellHook else "")} $ZDOTDIR/.zshrc
       ${if opt.fhs != {}
            then ''${jailer}/bin/linker ${opt.fhs} /''
            else ''ln -s /host/etc /etc
@@ -156,5 +157,5 @@ in {
   #   X11: set to true, if you want X11 access. False (default).
   #   sandboxIsHome: set to true, if you want $HOME set to sandboxRoot. False (default).
   # }
-  sandbox = opt: setShellHook enterJail (inJail (addDefaults opt)) opt.sandboxRoot opt.drv;
+  sandbox = opt: setShellHook enterJail (inJail (addDefaults opt) opt.drv) opt.sandboxRoot opt.drv;
 }
