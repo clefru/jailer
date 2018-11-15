@@ -94,12 +94,12 @@ let pkgs = import <nixpkgs> {};
 
       exec ${jailer}/bin/jailer $SANDBOX_ROOT $2 $PWD
     '';
-    setShellHook = enterJail: inJail: dir: drv:
+    setShellHook = enterJailCmd: inJailCmd: dir: drv:
       # FIXME: The following kills the shell executing the run hook with an exec.
       # See if we can be more cooperative in fiddling with the $cmd variables and
       # potentially support --run, and --cmd args for nix-shell.
       pkgs.stdenv.lib.overrideDerivation drv (oldAttrs: {
-	shellHook = ''exec ${enterJail} ${builtins.toString dir} ${inJail}'';
+	      shellHook = ''exec ${enterJailCmd} ${builtins.toString dir} ${inJailCmd}'';
       });
     zshrcDirLocked = pkgs.writeText "zshrc" ''
        PS1="# "
