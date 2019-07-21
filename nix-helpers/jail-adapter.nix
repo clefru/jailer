@@ -64,28 +64,16 @@ let pkgs = import <nixpkgs> {};
       mkdir -p tmp; echo tmp:/tmp:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
       mkdir -p proc; echo proc:/proc:proc:$(($MS_NOSUID | $MS_NOEXEC | $MS_NODEV)) >> .fstab
 
-      # On /dev we:
-      # * can't mount devtmpfs, as devtmpfs isn't registered with
-      #   .fs_flags |= FS_USERNS_MOUNT.
-      # * can't bind-mount /dev without MS_REC. FIXME: Why?
-
-      mkdir -p dev; echo /dev:/dev:bind:$(($MS_BIND | $MS_REC | $MS_RDONLY)) >> .fstab
-
-      # Using MS_REC above unfortunately exposes the mqueue, shm and
-      # hugepages submounts.  These are potentially sensitive parts
-      # that the user didn't want to share with the sandbox.  Best we
-      # can do is shadow out sensitive parts with more tmpfs
-      # mounts. The jail can't unmount those to recover the original
-      # mount point.
-      #
-      # The proper fix for this is use a fuse FS that only passes
-      # through a set of whitelisted files from /dev.  Unfortunately
-      # overlayfs is not maked FS_USERNS_MOUNT, so we can't use it
-      # here.
-
-      echo tmp:/dev/shm:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-      echo tmp:/dev/mqueue:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
-      echo tmp:/dev/hugepages:tmpfs:$(($MS_NOSUID | $MS_STRICTATIME)) >> .fstab
+      # /dev: Only selectively include devices. Not exposed /dev.
+      mkdir -p dev
+      for i in null zero ptmx tty random urandom full; do
+        # Bind-mounting a file needs an inode, therefore we create an
+        # empty file at the destination. This trick is stolen from
+        # nix/src/libstore/build.cc. As bind shadows the complete inode,
+        # the empty files turn into device nodes.
+        touch dev/$i
+        echo /dev/$i:/dev/$i:bind:$(($MS_BIND)) >> .fstab
+      done
 
       # Bind mount the root of the sandbox.
       mkdir -p ./$1; echo $1:$1:bind:$(($MS_BIND | $MS_REC)) >> .fstab
