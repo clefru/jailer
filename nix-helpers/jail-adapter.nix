@@ -40,6 +40,7 @@ let pkgs = import <nixpkgs> {};
 
       mkdir -p run
       cp -a /run/current-system run
+      mkdir -p run/user/$UID
 
       # Note on security: Only binds mounts and file systems with FS_USERNS_MOUNT
       # set in .fs_flags can be mounted from user-space containers.
